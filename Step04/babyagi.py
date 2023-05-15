@@ -146,15 +146,13 @@ for _ in range(4):
 def main():
     load_dotenv()
     ai_service = OpenAIService(api_key=os.getenv('OPENAI_API_KEY'))
-    vector_service = (
-        PineconeService(
-            api_key=os.getenv('PINECONE_API_KEY'),
-            environment=os.getenv('PINECONE_ENVIRONMENT'),
-            table_name='test-table',
-            dimension=1536,
-            metric='cosine',
-            pod_type='p1',
-        ),
+    vector_service = PineconeService(
+        api_key=os.getenv('PINECONE_API_KEY'),
+        environment=os.getenv('PINECONE_ENVIRONMENT'),
+        table_name='test-table',
+        dimension=1536,
+        metric='cosine',
+        pod_type='p1',
     )
 
 
