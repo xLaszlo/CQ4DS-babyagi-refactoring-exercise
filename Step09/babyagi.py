@@ -34,8 +34,9 @@ class OpenAIService:
         openai.api_key = api_key
 
     def get_ada_embedding(self, text):
-        text = text.replace('\n', ' ')
-        return openai.Embedding.create(input=[text], model='text-embedding-ada-002')['data'][0]['embedding']
+        return openai.Embedding.create(input=[text.replace('\n', ' ')], model='text-embedding-ada-002')['data'][0][
+            'embedding'
+        ]
 
     def create(self, prompt, max_tokens=100, temperature=0.5):
         return (
@@ -139,18 +140,15 @@ class BabyAGI:
             task_description=task_description,
             task_list=', '.join([t['task_name'] for t in self.task_list]),
         )
-        response = self.ai_service.create(prompt)
-        new_tasks = response.split('\n')
-        return [{'task_name': task_name} for task_name in new_tasks]
+        return [{'task_name': task_name} for task_name in self.ai_service.create(prompt).split('\n')]
 
     def prioritization_agent(self, this_task_id):
-        task_names = [t['task_name'] for t in self.task_list]
-        next_task_id = int(this_task_id) + 1
         prompt = PRIORITIZATION_PROMPT.format(
-            task_names=task_names, objective=self.objective, next_task_id=next_task_id
+            task_names=[t['task_name'] for t in self.task_list],
+            objective=self.objective,
+            next_task_id=int(this_task_id) + 1,
         )
-        response = self.ai_service.create(prompt, max_tokens=1000)
-        new_tasks = response.split('\n')
+        new_tasks = self.ai_service.create(prompt, max_tokens=1000).split('\n')
         self.task_list = deque()
         for task_string in new_tasks:
             task_parts = task_string.strip().split('.', 1)
@@ -159,43 +157,34 @@ class BabyAGI:
                 task_name = task_parts[1].strip()
                 self.task_list.append({'task_id': task_id, 'task_name': task_name})
 
-    def execution_agent(self, task) -> str:
-        context = self.context_agent(query=self.objective, n=5)
-        response = self.ai_service.create(
-            prompt=EXECUTION_PROMPT.format(objective=self.objective, task=task), max_tokens=2000, temperature=0.7
-        )
-        return response
-
-    def context_agent(self, query, n):
-        query_embedding = self.ai_service.get_ada_embedding(query)
-        return self.vector_service.query(query_embedding, n)
-
     def run(self, first_task):
         print(self.objective)
-        first_task = {'task_id': 1, 'task_name': first_task}
-        self.add_task(first_task)
-        task_id_counter = 1
+        self.add_task({'task_id': 1, 'task_name': first_task})
         for _ in range(4):
             if self.task_list:
+                query_embedding = self.ai_service.get_ada_embedding(self.objective)
+                context = self.vector_service.query(query_embedding, 5)
+
                 task = self.task_list.popleft()
                 print(task['task_name'])
-                result = self.execution_agent(task['task_name'])
+                result = self.ai_service.create(
+                    prompt=EXECUTION_PROMPT.format(objective=self.objective, task=task),
+                    max_tokens=2000,
+                    temperature=0.7,
+                )
                 print(result)
                 this_task_id = int(task['task_id'])
-                enriched_result = {'data': result}
-                result_id = f'result_{task["task_id"]}'
-                vector = enriched_result['data']
                 self.vector_service.upsert(
                     [
                         (
-                            result_id,
-                            self.ai_service.get_ada_embedding(vector),
+                            f'result_{task["task_id"]}',
+                            self.ai_service.get_ada_embedding(result),
                             {'task': task['task_name'], 'result': result},
                         )
                     ]
                 )
-            new_tasks = self.task_creation_agent(enriched_result, task['task_name'])
-
+            new_tasks = self.task_creation_agent({'data': result}, task['task_name'])
+            task_id_counter = 1
             for new_task in new_tasks:
                 task_id_counter += 1
                 new_task.update({'task_id': task_id_counter})
