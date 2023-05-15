@@ -24,7 +24,6 @@ EXECUTION_PROMPT = """
 You are an AI who performs one task based on the following objective: {objective}. Your task: {task}\nResponse:
 """
 
-YOUR_TABLE_NAME = 'test-table'
 OBJECTIVE = 'Solve world hunger.'
 YOUR_FIRST_TASK = 'Develop a task list.'
 
