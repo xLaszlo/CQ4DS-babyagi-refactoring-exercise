@@ -24,10 +24,6 @@ EXECUTION_PROMPT = """
 You are an AI who performs one task based on the following objective: {objective}. Your task: {task}\nResponse:
 """
 
-YOUR_TABLE_NAME = 'test-table'
-OBJECTIVE = 'Solve world hunger.'
-YOUR_FIRST_TASK = 'Develop a task list.'
-
 
 class PineconeService:
     def __init__(self, api_key, environment, table_name, dimension, metric, pod_type):
@@ -38,11 +34,15 @@ class PineconeService:
         self.index = pinecone.Index(table_name)
 
 
-task_list = deque([])
+class BabyAGI:
+    def __init__(self, objective, ai_service, vector_service):
+        self.objective = objective
+        self.ai_service = ai_service
+        self.vector_service = vector_service
+        self.task_list = deque([])
 
-
-def add_task(task):
-    task_list.append(task)
+    def add_task(self, task):
+        self.task_list.append(task)
 
 
 class OpenAIService:
@@ -145,15 +145,19 @@ for _ in range(4):
 
 def main():
     load_dotenv()
-    ai_service = OpenAIService(api_key=os.getenv('OPENAI_API_KEY'))
-    vector_service = PineconeService(
-        api_key=os.getenv('PINECONE_API_KEY'),
-        environment=os.getenv('PINECONE_ENVIRONMENT'),
-        table_name='test-table',
-        dimension=1536,
-        metric='cosine',
-        pod_type='p1',
+    baby_agi = BabyAGI(
+        objective='Solve world hunger.',
+        ai_service=OpenAIService(api_key=os.getenv('OPENAI_API_KEY')),
+        vector_service=PineconeService(
+            api_key=os.getenv('PINECONE_API_KEY'),
+            environment=os.getenv('PINECONE_ENVIRONMENT'),
+            table_name='test-table',
+            dimension=1536,
+            metric='cosine',
+            pod_type='p1',
+        ),
     )
+    baby_agi.run(first_task='Develop a task list.')
 
 
 if __name__ == '__main__':
