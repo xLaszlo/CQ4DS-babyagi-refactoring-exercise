@@ -4,7 +4,7 @@
 - Turn any reference to global variables and constants into access of properties (add `self.` before the variable name)
 - Replace reference to global constants to properties (e.g. OBJECTIVE -> self.objective as this is now part of BabyAGI class
 
-Note: This is just the first step of moving code broken down into several steps. The code is not executable yet.
+Note: At this point the code should run. If anything is not working fix it based on the error messages.
 
 The structure should look like this:
 
