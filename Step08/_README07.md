@@ -5,3 +5,7 @@
 - Add these two terms to `.gitignore` so they don't pollute the repository: `babyagi_cache.pkl`, `test-table.lance/`
 
 Note: It is OK to copy-paste and then review the code from the examples. Both techniques are frequently used so do review both.
+
+Note2: Running the code the second time should be near instant as there are no external calls, prompt responses come from the cache and LanceDB is very fast (and)
+
+Note3: Caveat: LLMs are not deterministic and even if temperature is set to 0 they can create different outputs which lead to cache misses and that require `TestAIService` to call `OpenAIService` and that is slow. Should be relatively rare.
