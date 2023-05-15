@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "cq4ds-babyagi-refactoring-exercise"
+version = "0.1.0"
+description = ""
+authors = ["Laszlo Sragner <sragner@gmail.com>"]
+readme = "README.md"
+packages = [{include = "cq4ds_babyagi_refactoring_exercise"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+black = "^23.3.0"
+python-dotenv = "^1.0.0"
+typer = "^0.9.0"
+openai = "^0.27.6"
+pinecone-client = "^2.2.1"
+lancedb = "^0.1.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.black]
+skip-string-normalization = true
+line-length = 120
