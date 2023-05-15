@@ -1,11 +1,11 @@
 import os
+import typer
 from dotenv import load_dotenv
 import openai
 import pinecone
 from collections import deque
 
 load_dotenv('../.env')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 PINECONE_ENVIRONMENT = os.getenv('PINECONE_ENVIRONMENT')
 
@@ -31,7 +31,6 @@ YOUR_TABLE_NAME = 'test-table'
 OBJECTIVE = 'Solve world hunger.'
 YOUR_FIRST_TASK = 'Develop a task list.'
 
-openai.api_key = OPENAI_API_KEY
 pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENVIRONMENT)
 
 table_name = YOUR_TABLE_NAME
@@ -50,9 +49,13 @@ def add_task(task):
     task_list.append(task)
 
 
-def get_ada_embedding(text):
-    text = text.replace('\n', ' ')
-    return openai.Embedding.create(input=[text], model='text-embedding-ada-002')['data'][0]['embedding']
+class OpenAIService:
+    def __init__(self, api_key):
+        openai.api_key = api_key
+
+    def get_ada_embedding(self, text):
+        text = text.replace('\n', ' ')
+        return openai.Embedding.create(input=[text], model='text-embedding-ada-002')['data'][0]['embedding']
 
 
 def task_creation_agent(objective, result, task_description, task_list):
@@ -142,3 +145,12 @@ for _ in range(4):
         new_task.update({'task_id': task_id_counter})
         add_task(new_task)
     prioritization_agent(this_task_id)
+
+
+def main():
+    load_dotenv()
+    ai_service = OpenAIService(api_key=os.getenv('OPENAI_API_KEY'))
+
+
+if __name__ == '__main__':
+    typer.run(main)
