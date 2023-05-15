@@ -1,17 +1,32 @@
 ### Step 02: Cleanse code
 
-- Remove comments
-- Remove type hints (for now)
-- Remove print statements
-- Move api keys to .env file in the main repository directory (see example below)
-- Get api keys from environment with load_dotenv() and os.getenv()
+- Move code into classes (OpenAIService, PineconeService, BabyAGI)
+- Set up production context with `main()` function
+- Inline as many constants as possible (apart from PROMPTS)
+- Use typer for simply CLI implementation
 
+This step drafts the Clean Architecture. BabyAGI will be the business logic, OpenAIService and PineconeService the Adapter Design Patterns for external services. BabyAGI's `run()` function will implement the "Inversion of Control". The `main()` function sets up the slow "production" context, which we will later swap to the fast "test" context where we replace the adapters to "test doubles", classes that look like the real ones but internal just fake the API calls.
 
-FILENAME: .env LOCATION: CQ4DS-babyagi-refactoring-exercise/
----- START ----
-OPENAI_API_KEY=your-openai-key
-PINECONE_API_KEY=your-pinecone-key
-PINECONE_ENVIRONMENT=asia-northeast1-gcp
----- END ----
+The structure should look like this:
 
-Note: this file is in .gitignore so you won't store it in github and make it public accidentally
+```
+class OpenAIService:
+    ...
+class PineconeService:
+    ...
+class BabyAGI:
+    ...
+    def run(...):
+       while True:
+            ...
+def main():
+    baby_agi = BabyAGI(
+        ai_service=OpenAIService(...),
+        vector_service=PineconeService(...),
+        ...
+    )
+    baby_agi.run(...)
+
+if __name__ == '__main__':
+    typer.run(main)
+```
