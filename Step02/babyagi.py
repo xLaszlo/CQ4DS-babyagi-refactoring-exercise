@@ -4,6 +4,11 @@ import openai
 import pinecone
 from collections import deque
 
+load_dotenv('../.env')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
+PINECONE_ENVIRONMENT = os.getenv('PINECONE_ENVIRONMENT')
+
 TASK_CREATION_PROMPT = """
 You are an task creation AI that uses the result of an execution agent to create new tasks with the following objective:
 {objective}, The last completed task has the result: {result}. This result was based on this task description: {task_description}.
@@ -21,11 +26,6 @@ Start the task list with number {next_task_id}."""
 EXECUTION_PROMPT = """
 You are an AI who performs one task based on the following objective: {objective}. Your task: {task}\nResponse:
 """
-
-load_dotenv('../.env')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
-PINECONE_ENVIRONMENT = os.getenv('PINECONE_ENVIRONMENT')
 
 YOUR_TABLE_NAME = 'test-table'
 OBJECTIVE = 'Solve world hunger.'
