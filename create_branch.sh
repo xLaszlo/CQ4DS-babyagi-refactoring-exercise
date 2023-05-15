@@ -4,6 +4,7 @@ switch=$1
 if [ -z "$switch" ]; then
     echo "use ./create_branch -do"
 else
+    cp Step01/* Step00
     cp Step02/* Step01
     cp Step03/* Step02
     cp Step04/* Step03
