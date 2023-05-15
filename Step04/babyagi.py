@@ -5,9 +5,6 @@ import openai
 import pinecone
 from collections import deque
 
-load_dotenv('../.env')
-PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
-PINECONE_ENVIRONMENT = os.getenv('PINECONE_ENVIRONMENT')
 
 TASK_CREATION_PROMPT = """
 You are an task creation AI that uses the result of an execution agent to create new tasks with the following objective:
@@ -31,16 +28,15 @@ YOUR_TABLE_NAME = 'test-table'
 OBJECTIVE = 'Solve world hunger.'
 YOUR_FIRST_TASK = 'Develop a task list.'
 
-pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENVIRONMENT)
 
-table_name = YOUR_TABLE_NAME
-dimension = 1536
-metric = 'cosine'
-pod_type = 'p1'
-if table_name not in pinecone.list_indexes():
-    pinecone.create_index(table_name, dimension=dimension, metric=metric, pod_type=pod_type)
+class PineconeService:
+    def __init__(self, api_key, environment, table_name, dimension, metric, pod_type):
+        self.table_name = table_name
+        pinecone.init(api_key=api_key, environment=environment)
+        if table_name not in pinecone.list_indexes():
+            pinecone.create_index(table_name, dimension=dimension, metric=metric, pod_type=pod_type)
+        self.index = pinecone.Index(table_name)
 
-index = pinecone.Index(table_name)
 
 task_list = deque([])
 
@@ -150,6 +146,16 @@ for _ in range(4):
 def main():
     load_dotenv()
     ai_service = OpenAIService(api_key=os.getenv('OPENAI_API_KEY'))
+    vector_service = (
+        PineconeService(
+            api_key=os.getenv('PINECONE_API_KEY'),
+            environment=os.getenv('PINECONE_ENVIRONMENT'),
+            table_name='test-table',
+            dimension=1536,
+            metric='cosine',
+            pod_type='p1',
+        ),
+    )
 
 
 if __name__ == '__main__':
