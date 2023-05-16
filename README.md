@@ -29,7 +29,7 @@ Concepts in the exercise:
     - Guard Clause
     - "Happy path on the left"
 
-##Setup
+## Setup
 
 If you start from scratch this is a set of commands to set up poetry and black:
 
