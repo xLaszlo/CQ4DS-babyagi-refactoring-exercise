@@ -29,6 +29,14 @@ You are an AI who performs one task based on the following objective: {objective
 """
 
 
+class Task:
+    def __init__(self, name, id=None, result=None, vector=None):
+        self.name = name
+        self.id = id
+        self.result = result
+        self.vector = vector
+
+
 class OpenAIService:
     def __init__(self, api_key):
         openai.api_key = api_key
@@ -89,10 +97,10 @@ class PineconeService:
     def query(self, query_embedding, top_k):
         results = self.index.query(query_embedding, top_k=top_k, include_metadata=True)
         sorted_results = sorted(results.matches, key=lambda x: x.score, reverse=True)
-        return [(str(item.metadata['task'])) for item in sorted_results]
+        return [Task(**item.metadata) for item in sorted_results]
 
-    def upsert(self, data):
-        self.index.upsert(data)
+    def upsert(self, task):
+        self.index.upsert([(task.id, task.vector, task.__dict__)])
 
 
 class LanceService:
@@ -100,27 +108,21 @@ class LanceService:
         self.db = lancedb.connect('.')
         schema = pa.schema(
             [
-                pa.field('result_id', pa.string()),
+                pa.field('id', pa.int32()),
                 pa.field('vector', pa.list_(pa.float32(), dimension)),
-                pa.field('task', pa.string()),
+                pa.field('name', pa.string()),
                 pa.field('result', pa.string()),  # TODO There is a fixed schema but we keep converting
             ]
         )
-        data = [{'result_id': 0, 'vector': [0.0] * dimension, 'task': 'asd', 'result': 'asd'}]
+        data = [{'id': 0, 'vector': [0.0] * dimension, 'name': 'asd', 'result': 'asd'}]
         self.table = self.db.create_table(table_name, mode='overwrite', data=data, schema=schema)
 
     def query(self, query_embedding, top_k):
-        result = self.table.search(query_embedding).limit(top_k).to_df()
-        return [v for v in result['task']]
+        result = self.table.search(query_embedding).limit(top_k).to_df().drop(columns=['score'])
+        return [Task(**v) for v in result.to_dict(orient="records")]
 
-    def upsert(self, data):
-        data = {  # TODO This doesn't look good, why are we converting?
-            'result_id': data[0][0],
-            'vector': data[0][1],
-            'task': data[0][2]['task'],
-            'result': data[0][2]['result'],
-        }
-        self.table.add(pd.DataFrame([data]))
+    def upsert(self, task):
+        self.table.add(pd.DataFrame([task.__dict__]))
 
 
 class BabyAGI:
@@ -132,64 +134,55 @@ class BabyAGI:
         self.task_list = deque([])
 
     def add_task(self, task):
+        if task.id is None:
+            task.id = max([t.id for t in self.task_list], default=0) + 1
         self.task_list.append(task)
 
-    def task_creation_agent(self, result, task_description):
+    def task_creation_agent(self, task):
         prompt = TASK_CREATION_PROMPT.format(
             objective=self.objective,
-            result=result,
-            task_description=task_description,
-            task_list=', '.join([t['task_name'] for t in self.task_list]),
+            result=task.result,
+            task_description=task.name,
+            task_list=', '.join([t.name for t in self.task_list]),
         )
         return [{'task_name': task_name} for task_name in self.ai_service.create(prompt).split('\n')]
 
     def prioritization_agent(self, this_task_id):
+        def to_task(value):
+            parts = value.strip().split('.', 1)
+            if len(parts) != 2:
+                return None
+            return Task(id=int(parts[0].strip()), name=parts[1].strip())
+
         prompt = PRIORITIZATION_PROMPT.format(
-            task_names=[t['task_name'] for t in self.task_list],
+            task_names=', '.join([t.name for t in self.task_list]),
             objective=self.objective,
             next_task_id=int(this_task_id) + 1,
         )
-        new_tasks = self.ai_service.create(prompt, max_tokens=1000).split('\n')
-        self.task_list = deque()
-        for task_string in new_tasks:
-            task_parts = task_string.strip().split('.', 1)
-            if len(task_parts) == 2:
-                task_id = task_parts[0].strip()
-                task_name = task_parts[1].strip()
-                self.task_list.append({'task_id': task_id, 'task_name': task_name})
+        new_tasks = self.ai_service.create(prompt, max_tokens=1000)
+        self.task_list = deque([to_task(v) for v in new_tasks.split('\n') if to_task(v) is not None])
 
     def run(self, first_task):
-        print(self.objective)
-        self.add_task({'task_id': 1, 'task_name': first_task})
+        self.add_task(Task(name=first_task))
         for _ in range(4):
             if self.task_list:
                 context = self.vector_service.query(self.objective_embedding, 5)
 
                 task = self.task_list.popleft()
-                print(task['task_name'])
-                result = self.ai_service.create(
+                task.result = self.ai_service.create(
                     prompt=EXECUTION_PROMPT.format(objective=self.objective, task=task),
                     max_tokens=2000,
                     temperature=0.7,
                 )
-                print(result)
-                this_task_id = int(task['task_id'])
-                self.vector_service.upsert(
-                    [
-                        (
-                            f'result_{task["task_id"]}',
-                            self.ai_service.get_ada_embedding(result),
-                            {'task': task['task_name'], 'result': result},
-                        )
-                    ]
-                )
-            new_tasks = self.task_creation_agent({'data': result}, task['task_name'])
+                task.vector = self.ai_service.get_ada_embedding(task.result)
+                self.vector_service.upsert(task)
+            new_tasks = self.task_creation_agent(task)
             task_id_counter = 1
             for new_task in new_tasks:
                 task_id_counter += 1
                 new_task.update({'task_id': task_id_counter})
-                self.add_task(new_task)
-            self.prioritization_agent(this_task_id)
+                self.add_task(Task(id=new_task['task_id'], name=new_task['task_name']))
+            self.prioritization_agent(task.id)
 
 
 def main():

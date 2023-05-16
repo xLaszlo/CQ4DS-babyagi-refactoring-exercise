@@ -145,9 +145,10 @@ class BabyAGI:
             task_description=task.name,
             task_list=', '.join([t.name for t in self.task_list]),
         )
-        return [{'task_name': task_name} for task_name in self.ai_service.create(prompt).split('\n')]
+        for task_name in self.ai_service.create(prompt).split('\n'):
+            self.add_task(Task(name=task_name))
 
-    def prioritization_agent(self, this_task_id):
+    def task_prioritization_agent(self, this_task_id):
         def to_task(value):
             parts = value.strip().split('.', 1)
             if len(parts) != 2:
@@ -162,27 +163,25 @@ class BabyAGI:
         new_tasks = self.ai_service.create(prompt, max_tokens=1000)
         self.task_list = deque([to_task(v) for v in new_tasks.split('\n') if to_task(v) is not None])
 
+    def task_execution_agent(self, task):
+        task.result = self.ai_service.create(
+            prompt=EXECUTION_PROMPT.format(objective=self.objective, task=task),
+            max_tokens=2000,
+            temperature=0.7,
+        )
+        task.vector = self.ai_service.get_ada_embedding(task.result)
+        self.vector_service.upsert(task)
+
     def run(self, first_task):
         self.add_task(Task(name=first_task))
         for _ in range(4):
-            if self.task_list:
-                context = self.vector_service.query(self.objective_embedding, 5)
-
-                task = self.task_list.popleft()
-                task.result = self.ai_service.create(
-                    prompt=EXECUTION_PROMPT.format(objective=self.objective, task=task),
-                    max_tokens=2000,
-                    temperature=0.7,
-                )
-                task.vector = self.ai_service.get_ada_embedding(task.result)
-                self.vector_service.upsert(task)
-            new_tasks = self.task_creation_agent(task)
-            task_id_counter = 1
-            for new_task in new_tasks:
-                task_id_counter += 1
-                new_task.update({'task_id': task_id_counter})
-                self.add_task(Task(id=new_task['task_id'], name=new_task['task_name']))
-            self.prioritization_agent(task.id)
+            if len(self.task_list) == 0:
+                exit(0)
+            context = self.vector_service.query(self.objective_embedding, 5)
+            task = self.task_list.popleft()
+            self.task_execution_agent(task)
+            self.task_creation_agent(task)
+            self.task_prioritization_agent(task.id)
 
 
 def main():
