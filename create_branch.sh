@@ -15,15 +15,4 @@ else
     cp Step09/* Step08
     cp Step10/* Step09
     cp Step11/* Step10
-    cp Step12/* Step11
-    cp Step13/* Step12
-    cp Step14/* Step13
-    cp Step15/* Step14
-    cp Step16/* Step15
-    cp Step17/* Step16
-    cp Step18/* Step17
-    cp Step19/* Step18
-    cp Step20/* Step19
-    cp Step21/* Step20
-    cp Step22/* Step21
 fi
