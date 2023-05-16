@@ -138,12 +138,12 @@ class BabyAGI:
             task.id = max([t.id for t in self.task_list], default=0) + 1
         self.task_list.append(task)
 
-    def task_creation_agent(self, result, task_description):
+    def task_creation_agent(self, task):
         prompt = TASK_CREATION_PROMPT.format(
             objective=self.objective,
-            result=result,
-            task_description=task_description,
-            task_list=', '.join([t['task_name'] for t in self.task_list]),
+            result=task.result,
+            task_description=task.name,
+            task_list=', '.join([t.name for t in self.task_list]),
         )
         return [{'task_name': task_name} for task_name in self.ai_service.create(prompt).split('\n')]
 
@@ -174,23 +174,15 @@ class BabyAGI:
                     max_tokens=2000,
                     temperature=0.7,
                 )
-                this_task_id = int(task['task_id'])
-                self.vector_service.upsert(
-                    [
-                        (
-                            f'result_{task["task_id"]}',
-                            self.ai_service.get_ada_embedding(result),
-                            {'task': task['task_name'], 'result': result},
-                        )
-                    ]
-                )
-            new_tasks = self.task_creation_agent({'data': result}, task['task_name'])
+                task.vector = self.ai_service.get_ada_embedding(task.result)
+                self.vector_service.upsert(task)
+            new_tasks = self.task_creation_agent(task)
             task_id_counter = 1
             for new_task in new_tasks:
                 task_id_counter += 1
                 new_task.update({'task_id': task_id_counter})
-                self.add_task(new_task)
-            self.prioritization_agent(this_task_id)
+                self.add_task(Task(id=new_task['task_id'], name=new_task['task_name']))
+            self.prioritization_agent(task.id)
 
 
 def main():
