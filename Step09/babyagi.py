@@ -125,9 +125,10 @@ class LanceService:
 
 class BabyAGI:
     def __init__(self, objective, ai_service, vector_service):
-        self.objective = objective
         self.ai_service = ai_service
         self.vector_service = vector_service
+        self.objective = objective
+        self.objective_embedding = self.ai_service.get_ada_embedding(self.objective)
         self.task_list = deque([])
 
     def add_task(self, task):
@@ -162,8 +163,7 @@ class BabyAGI:
         self.add_task({'task_id': 1, 'task_name': first_task})
         for _ in range(4):
             if self.task_list:
-                query_embedding = self.ai_service.get_ada_embedding(self.objective)
-                context = self.vector_service.query(query_embedding, 5)
+                context = self.vector_service.query(self.objective_embedding, 5)
 
                 task = self.task_list.popleft()
                 print(task['task_name'])
