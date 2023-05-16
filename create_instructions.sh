@@ -1,1 +1,1 @@
-find . -name "README??.md" | sort | xargs cat > INSTRUCTIONS.md
+find . -name "_README??.md" | sort | xargs cat > INSTRUCTIONS.md
