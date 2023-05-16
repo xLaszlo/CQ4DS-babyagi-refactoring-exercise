@@ -1,8 +1,12 @@
 import os
 import typer
+import pickle
+import pandas as pd
 from dotenv import load_dotenv
 import openai
 import pinecone
+import lancedb
+import pyarrow as pa
 from collections import deque
 
 
@@ -49,6 +53,30 @@ class OpenAIService:
         )
 
 
+class TestAIService:
+    def __init__(self, ai_service, cache_file):
+        self.ai_service = ai_service
+        self.cache_file = cache_file
+        if os.path.isfile(cache_file):
+            self.cache = pickle.load(open(cache_file, 'rb'))
+        else:
+            self.cache = {'ada': {}, 'create': {}}
+            pickle.dump(self.cache, open(cache_file, 'wb'))
+
+    def get_ada_embedding(self, text):
+        if text not in self.cache['ada']:
+            self.cache['ada'][text] = self.ai_service.get_ada_embedding(text)
+            pickle.dump(self.cache, open(self.cache_file, 'wb'))
+        return self.cache['ada'][text]
+
+    def create(self, prompt, max_tokens=100, temperature=0.5):
+        key = (prompt, max_tokens, temperature)
+        if key not in self.cache['create']:
+            self.cache['create'][key] = self.ai_service.create(prompt, max_tokens, temperature)
+            pickle.dump(self.cache, open(self.cache_file, 'wb'))
+        return self.cache['create'][key]
+
+
 class PineconeService:
     def __init__(self, api_key, environment, table_name, dimension, metric, pod_type):
         self.table_name = table_name
@@ -64,6 +92,34 @@ class PineconeService:
 
     def upsert(self, data):
         self.index.upsert(data)
+
+
+class LanceService:
+    def __init__(self, table_name, dimension):
+        self.db = lancedb.connect('.')
+        schema = pa.schema(
+            [
+                pa.field('result_id', pa.string()),
+                pa.field('vector', pa.list_(pa.float32(), dimension)),
+                pa.field('task', pa.string()),
+                pa.field('result', pa.string()),  # TODO There is a fixed schema but we keep converting
+            ]
+        )
+        data = [{'result_id': 0, 'vector': [0.0] * dimension, 'task': 'asd', 'result': 'asd'}]
+        self.table = self.db.create_table(table_name, mode='overwrite', data=data, schema=schema)
+
+    def query(self, query_embedding, top_k):
+        result = self.table.search(query_embedding).limit(top_k).to_df()
+        return [v for v in result['task']]
+
+    def upsert(self, data):
+        data = {  # TODO This doesn't look good, why are we converting?
+            'result_id': data[0][0],
+            'vector': data[0][1],
+            'task': data[0][2]['task'],
+            'result': data[0][2]['result'],
+        }
+        self.table.add(pd.DataFrame([data]))
 
 
 class BabyAGI:
@@ -151,15 +207,22 @@ def main():
     load_dotenv()
     baby_agi = BabyAGI(
         objective='Solve world hunger.',
-        ai_service=OpenAIService(api_key=os.getenv('OPENAI_API_KEY')),
-        vector_service=PineconeService(
-            api_key=os.getenv('PINECONE_API_KEY'),
-            environment=os.getenv('PINECONE_ENVIRONMENT'),
+        ai_service=TestAIService(
+            ai_service=OpenAIService(api_key=os.getenv('OPENAI_API_KEY')),
+            cache_file='babyagi_cache.pkl',
+        ),
+        vector_service=LanceService(
             table_name='test-table',
             dimension=1536,
-            metric='cosine',
-            pod_type='p1',
-        ),
+        )
+        # vector_service=PineconeService(
+        #     api_key=os.getenv('PINECONE_API_KEY'),
+        #     environment=os.getenv('PINECONE_ENVIRONMENT'),
+        #     table_name='test-table',
+        #     dimension=1536,
+        #     metric='cosine',
+        #     pod_type='p1',
+        # ),
     )
     baby_agi.run(first_task='Develop a task list.')
 

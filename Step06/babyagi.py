@@ -33,6 +33,21 @@ class OpenAIService:
         text = text.replace('\n', ' ')
         return openai.Embedding.create(input=[text], model='text-embedding-ada-002')['data'][0]['embedding']
 
+    def create(self, prompt, max_tokens=100, temperature=0.5):
+        return (
+            openai.Completion.create(
+                engine='text-davinci-003',
+                prompt=prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=1,
+                frequency_penalty=0,
+                presence_penalty=0,
+            )
+            .choices[0]
+            .text.strip()
+        )
+
 
 class PineconeService:
     def __init__(self, api_key, environment, table_name, dimension, metric, pod_type):
@@ -41,6 +56,14 @@ class PineconeService:
         if table_name not in pinecone.list_indexes():
             pinecone.create_index(table_name, dimension=dimension, metric=metric, pod_type=pod_type)
         self.index = pinecone.Index(table_name)
+
+    def query(self, query_embedding, top_k):
+        results = self.index.query(query_embedding, top_k=top_k, include_metadata=True)
+        sorted_results = sorted(results.matches, key=lambda x: x.score, reverse=True)
+        return [(str(item.metadata['task'])) for item in sorted_results]
+
+    def upsert(self, data):
+        self.index.upsert(data)
 
 
 class BabyAGI:
@@ -60,16 +83,8 @@ class BabyAGI:
             task_description=task_description,
             task_list=', '.join([t['task_name'] for t in self.task_list]),
         )
-        response = openai.Completion.create(
-            engine='text-davinci-003',
-            prompt=prompt,
-            temperature=0.5,
-            max_tokens=100,
-            top_p=1,
-            frequency_penalty=0,
-            presence_penalty=0,
-        )
-        new_tasks = response.choices[0].text.strip().split('\n')
+        response = self.ai_service.create(prompt)
+        new_tasks = response.split('\n')
         return [{'task_name': task_name} for task_name in new_tasks]
 
     def prioritization_agent(self, this_task_id):
@@ -78,16 +93,8 @@ class BabyAGI:
         prompt = PRIORITIZATION_PROMPT.format(
             task_names=task_names, objective=self.objective, next_task_id=next_task_id
         )
-        response = openai.Completion.create(
-            engine='text-davinci-003',
-            prompt=prompt,
-            temperature=0.5,
-            max_tokens=1000,
-            top_p=1,
-            frequency_penalty=0,
-            presence_penalty=0,
-        )
-        new_tasks = response.choices[0].text.strip().split('\n')
+        response = self.ai_service.create(prompt, max_tokens=1000)
+        new_tasks = response.split('\n')
         self.task_list = deque()
         for task_string in new_tasks:
             task_parts = task_string.strip().split('.', 1)
@@ -98,22 +105,14 @@ class BabyAGI:
 
     def execution_agent(self, task) -> str:
         context = self.context_agent(query=self.objective, n=5)
-        response = openai.Completion.create(
-            engine='text-davinci-003',
-            prompt=EXECUTION_PROMPT.format(objective=self.objective, task=task),
-            temperature=0.7,
-            max_tokens=2000,
-            top_p=1,
-            frequency_penalty=0,
-            presence_penalty=0,
+        response = self.ai_service.create(
+            prompt=EXECUTION_PROMPT.format(objective=self.objective, task=task), max_tokens=2000, temperature=0.7
         )
-        return response.choices[0].text.strip()
+        return response
 
     def context_agent(self, query, n):
         query_embedding = self.ai_service.get_ada_embedding(query)
-        results = self.vector_service.index.query(query_embedding, top_k=n, include_metadata=True)
-        sorted_results = sorted(results.matches, key=lambda x: x.score, reverse=True)
-        return [(str(item.metadata['task'])) for item in sorted_results]
+        return self.vector_service.query(query_embedding, n)
 
     def run(self, first_task):
         print(self.objective)
@@ -130,7 +129,7 @@ class BabyAGI:
                 enriched_result = {'data': result}
                 result_id = f'result_{task["task_id"]}'
                 vector = enriched_result['data']
-                self.vector_service.index.upsert(
+                self.vector_service.upsert(
                     [
                         (
                             result_id,
